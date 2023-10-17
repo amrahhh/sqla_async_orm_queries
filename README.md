@@ -35,7 +35,7 @@ engine = create_async_engine(
 Create your session. Use async_sessionmaker
 ```python
 SessionLocal = async_sessionmaker(
-    expire_on_commit=False,
+    expire_on_commit=True,
     class_=AsyncSession,
     bind=engine,
 )
