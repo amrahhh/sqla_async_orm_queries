@@ -60,3 +60,11 @@ class Model(Base):
             db_data = await session.execute(query)
             await session.commit()
             return db_data
+
+    @classmethod
+    async def select_with_pagination(cls, *args: BinaryExpression, page: int = 1, size: int = 10):
+        async with SessionLocal() as session:
+            query = select(cls).where(*args).offset((page - 1) * size).limit(size)
+            result = await session.execute(query)
+            data = result.scalars().all()
+            return data
