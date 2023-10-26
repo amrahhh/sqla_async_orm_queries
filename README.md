@@ -87,4 +87,17 @@ Example of deleting an entry
 await Test.delete(Test.country == "AZ")
 ```
 
+Example of selecting all entries with pagination
+```python
+all_entries_pagination = await Test.select_with_pagination(page=1, size=1)
+```
+
+Example of selecting all entries with pagination and args
+```python
+all_entries_pagination_and_criteria = await Test.select_with_pagination(
+    Test.name == "Amrah", page=1, size=1
+)
+```
+
+
 You can check full example in `examples` folder

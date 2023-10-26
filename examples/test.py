@@ -39,7 +39,9 @@ async def main():
     init_session(SessionLocal)
 
     # Example of creating an entry
-    await Test.create({"id": 10, "country": "AZ", "name": "Amrah", "surname": "Baghirov"})
+    await Test.create({"id": 11, "country": "AZ", "name": "Amrah", "surname": "Baghirov"})
+    await Test.create({"id": 12, "country": "EN", "name": "Shukran", "surname": "Jabbarov"})
+    await Test.create({"id": 13, "country": "RU", "name": "Amrah", "surname": "Suleymanli"})
 
     # Example of selecting all entries
     all_entries = await Test.select_all()
@@ -65,6 +67,16 @@ async def main():
     # Check if the entry has been deleted
     all_entries_after_deletion = await Test.select_all()
     print("all entries after deletion:", all_entries_after_deletion)
+
+    # Example of selecting all entries with pagination
+    all_entries_pagination = await Test.select_with_pagination(page=1, size=1)
+    print("all entries with pagination", all_entries_pagination)
+
+    # Example of selecting all entries with pagination and args
+    all_entries_pagination_and_criteria = await Test.select_with_pagination(
+        Test.name == "Amrah", page=1, size=1
+    )
+    print("all entries with pagination", all_entries_pagination_and_criteria)
 
 
 if __name__ == "__main__":
