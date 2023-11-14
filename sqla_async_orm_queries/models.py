@@ -68,3 +68,8 @@ class Model(Base):
             result = await session.execute(query)
             data = result.scalars().all()
             return data
+
+    async def apply(self):
+        async with SessionLocal() as session:
+            session.add(self)
+            await session.commit()

@@ -99,5 +99,10 @@ all_entries_pagination_and_criteria = await Test.select_with_pagination(
 )
 ```
 
-
+Example of self-updating 
+```python
+entry = await Test.select_one(Test.country == "AZ")
+entry.country = "EN"
+await entry.apply()
+```
 You can check full example in `examples` folder

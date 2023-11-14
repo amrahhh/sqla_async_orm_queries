@@ -39,15 +39,21 @@ async def main():
     init_session(SessionLocal)
 
     # Example of creating an entry
-    await Test.create({"id": 11, "country": "AZ", "name": "Amrah", "surname": "Baghirov"})
-    await Test.create({"id": 12, "country": "EN", "name": "Shukran", "surname": "Jabbarov"})
-    await Test.create({"id": 13, "country": "RU", "name": "Amrah", "surname": "Suleymanli"})
+    await Test.create(
+        {"id": 11, "country": "AZ", "name": "Amrah", "surname": "Baghirov"}
+    )
+    await Test.create(
+        {"id": 12, "country": "EN", "name": "Shukran", "surname": "Jabbarov"}
+    )
+    await Test.create(
+        {"id": 13, "country": "RU", "name": "Amrah", "surname": "Suleymanli"}
+    )
 
     # Example of selecting all entries
     all_entries = await Test.select_all()
     print("all entries:", all_entries)
 
-    specific_entries = await Test.select_all(Test.name=="Kerim")
+    specific_entries = await Test.select_all(Test.name == "Kerim")
     print("specific entries:", specific_entries)
 
     # Example of selecting one entry
@@ -77,6 +83,12 @@ async def main():
         Test.name == "Amrah", page=1, size=1
     )
     print("all entries with pagination", all_entries_pagination_and_criteria)
+
+    # Example of self-updating
+    entry = await Test.select_one(Test.country == "AZ")
+    entry.country = "EN"
+    await entry.apply()
+    print("updated entry", entry)
 
 
 if __name__ == "__main__":
