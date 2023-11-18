@@ -1,19 +1,26 @@
-from sqlalchemy import select, update, delete
+from typing import List, TypeVar
+
+from sqlalchemy import delete, select, update
+from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.sql.elements import BinaryExpression
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.ext.asyncio import AsyncAttrs,AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
 
 SessionLocal = None
 INITIALIZED = False
 
+TModels = TypeVar("TModels", bound="Model")
+
+
 def init_session(session: AsyncSession):
     global SessionLocal, INITIALIZED
-    if isinstance(session,(async_sessionmaker,sessionmaker)) and  issubclass(session.class_, AsyncSession):
+    if isinstance(session, (async_sessionmaker, sessionmaker)) and issubclass(
+        session.class_, AsyncSession
+    ):
         SessionLocal = session
         INITIALIZED = True
         return True
     raise TypeError("You need to use SQLAlchemy `AsyncSession`")
+
 
 class Base(DeclarativeBase, AsyncAttrs):
     pass
@@ -62,7 +69,9 @@ class Model(Base):
             return db_data
 
     @classmethod
-    async def select_with_pagination(cls, *args: BinaryExpression, page: int = 1, size: int = 10):
+    async def select_with_pagination(
+        cls, *args: BinaryExpression, page: int = 1, size: int = 10
+    ):
         async with SessionLocal() as session:
             query = select(cls).where(*args).offset((page - 1) * size).limit(size)
             result = await session.execute(query)
@@ -72,4 +81,10 @@ class Model(Base):
     async def apply(self):
         async with SessionLocal() as session:
             session.add(self)
+            await session.commit()
+
+    @classmethod
+    async def apply_all(self, models: List[TModels]):
+        async with SessionLocal() as session:
+            session.add_all(models)
             await session.commit()
