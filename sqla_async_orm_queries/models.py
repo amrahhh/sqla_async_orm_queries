@@ -1,5 +1,4 @@
 from typing import List, TypeVar
-
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -32,10 +31,14 @@ class Model(Base):
     @classmethod
     async def create(cls, data: dict):
         async with SessionLocal() as session:
-            data = cls(**data)
-            session.add(data)
-            await session.commit()
-            return data
+            try:
+                data = cls(**data)
+                session.add(data)
+                await session.commit()
+                return data
+            except Exception as e:
+                await session.rollback()
+                raise e
 
     @classmethod
     async def select_one(cls, *args: BinaryExpression):
@@ -54,19 +57,27 @@ class Model(Base):
     @classmethod
     async def update(cls, data: dict, *args: BinaryExpression):
         async with SessionLocal() as session:
-            query = update(cls).where(*args).values(**data).returning(cls.id)
-            db_data = await session.execute(query)
-            db_data = db_data.scalar()
-            await session.commit()
-            return db_data
+            try:
+                query = update(cls).where(*args).values(**data).returning(cls.id)
+                db_data = await session.execute(query)
+                db_data = db_data.scalar()
+                await session.commit()
+                return db_data
+            except Exception as e:
+                await session.rollback()
+                raise e
 
     @classmethod
     async def delete(cls, *args: BinaryExpression):
         async with SessionLocal() as session:
-            query = delete(cls).where(*args)
-            db_data = await session.execute(query)
-            await session.commit()
-            return db_data
+            try:
+                query = delete(cls).where(*args)
+                db_data = await session.execute(query)
+                await session.commit()
+                return db_data
+            except Exception as e:
+                await session.rollback()
+                raise e
 
     @classmethod
     async def select_with_pagination(
@@ -80,11 +91,19 @@ class Model(Base):
 
     async def apply(self):
         async with SessionLocal() as session:
-            session.add(self)
-            await session.commit()
+            try:
+                session.add(self)
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                raise e
 
     @classmethod
     async def apply_all(self, models: List[TModels]):
         async with SessionLocal() as session:
-            session.add_all(models)
-            await session.commit()
+            try:
+                session.add_all(models)
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                raise e
