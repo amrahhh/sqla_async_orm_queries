@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqla-async-orm-queries"
-version = "1.0.5"
+version = "1.0.6"
 description = "Base model for SqlAlchemy async orm queries"
 authors = ["Amrah <bagirovemrah97@gmail.com>"]
 license = "MIT"

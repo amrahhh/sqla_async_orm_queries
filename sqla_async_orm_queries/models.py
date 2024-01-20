@@ -1,7 +1,7 @@
 from typing import List, TypeVar
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, joinedload
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, selectinload
 from sqlalchemy.sql.elements import BinaryExpression
 
 SessionLocal = None
@@ -45,7 +45,7 @@ class Model(Base):
         loaders = []
         async with SessionLocal() as session:
             if load_with:
-                loaders = [joinedload(getattr(cls, i)) for i in load_with]
+                loaders = [selectinload(getattr(cls, i)) for i in load_with]
             result = await session.execute(select(cls).where(*args).options(*loaders))
             data = result.scalar()
             return data
