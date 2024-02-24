@@ -104,12 +104,14 @@ class Model(Base):
 
     @classmethod
     async def select_with_pagination(
-        cls, *args: BinaryExpression, page: int = 1, size: int = 10,load_with: list[str] = None,loader_func: Callable = None
+        cls, *args: BinaryExpression, offset: int = 0, limit: int = 10,load_with: list[str] = None,loader_func: Callable = None
     ):
+        if offset < 0: 
+            raise Exception("offset can not be a negative")
         async with SessionLocal() as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
-            query = select(cls).where(*args).offset((page - 1) * size).limit(size).options(*loaders)
+            query = select(cls).where(*args).offset(offset).limit(limit).options(*loaders)
             result = await session.execute(query)
             data = result.scalars().all()
             return data
