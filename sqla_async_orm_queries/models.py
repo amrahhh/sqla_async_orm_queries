@@ -133,6 +133,7 @@ class Model(Base):
         load_with: list[str] = None,
         loader_func: Callable = None
     ):
+        loaders = []
         if offset < 0:
             raise Exception("offset can not be a negative")
         async with SessionLocal() as session:
