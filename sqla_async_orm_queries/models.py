@@ -33,7 +33,7 @@ class Model(Base):
     @staticmethod
     def _order_by(query,order_by):
         if order_by is not None:
-            return query.order_by(order_by)
+            return query.order_by(*order_by)
         return query
 
     @classmethod
@@ -59,7 +59,7 @@ class Model(Base):
     async def select_one(
         cls,
         *args: BinaryExpression,
-        order_by = None,
+        order_by: list[str] = None,
         load_with: list[str] = None,
         loader_func: Callable = None
     ):
@@ -77,7 +77,7 @@ class Model(Base):
     async def select_all(
         cls,
         *args: BinaryExpression,
-        order_by = None,
+        order_by: list[str] = None,
         load_with: list[str] = None,
         loader_func: Callable = None
     ):
@@ -129,7 +129,7 @@ class Model(Base):
         *args: BinaryExpression,
         offset: int = 0,
         limit: int = 10,
-        order_by: str = None,
+        order_by: list[str] = None,
         load_with: list[str] = None,
         loader_func: Callable = None
     ):
