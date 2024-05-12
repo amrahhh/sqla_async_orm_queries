@@ -24,3 +24,4 @@ classifiers = [
 python = "^3.8.2"
 sqlalchemy = ">=2.0.21"
 asyncpg = ">=0.28.0"
+greenlet = "^3.0.3"
