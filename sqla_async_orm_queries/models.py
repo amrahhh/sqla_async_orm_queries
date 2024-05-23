@@ -81,7 +81,10 @@ class Model(Base):
 
             query = cls._order_by(query,order_by)
             result = await session.execute(query)
-            data = result.one_or_none()
+            if columns:
+                data = result.one_or_none()
+            else:
+                data = result.scalar()
 
             return data
 
