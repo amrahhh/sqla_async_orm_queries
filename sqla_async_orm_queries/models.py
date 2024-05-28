@@ -110,7 +110,7 @@ class Model(Base):
 
             query = cls._order_by(query, order_by)
             result = await session.execute(query)
-            data = result.all()
+            data = result.scalars().all()
 
         return data
 
