@@ -1,10 +1,10 @@
-from typing import List, TypeVar, Callable
+from typing import List, TypeVar, Callable, Union
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, selectinload
 from sqlalchemy.sql.functions import count
 from sqlalchemy.sql.elements import BinaryExpression
-from sqlalchemy.orm import join
+from sqlalchemy.orm.query import Query
 
 
 SessionLocal = None
@@ -32,7 +32,7 @@ class Model(Base):
     __abstract__ = True
 
     @staticmethod
-    def _order_by(query,order_by):
+    def _order_by(query, order_by):
         if order_by is not None:
             return query.order_by(*order_by)
         return query
@@ -43,10 +43,26 @@ class Model(Base):
             loader_func = selectinload
         loaders = [loader_func(getattr(cls, i)) for i in loader_fields]
         return loaders
-    
+
     @classmethod
     def _build_columns(cls, columns: list[str]):
         return [getattr(cls, i) for i in columns]
+
+    @classmethod
+    async def execute_query(
+        cls, query: Union[Query, str], scalar: bool = False, all: bool = False
+    ):
+        async with SessionLocal() as session:
+            result = await session.execute(query)
+            if scalar and all:
+                data = result.scalars().all()
+            elif not scalar and all:
+                data = result.all()
+            elif scalar and not all:
+                data = result.scalar()
+            else:
+                raise NotImplementedError
+            return data
 
     @classmethod
     async def create(cls, data: dict):
@@ -79,7 +95,7 @@ class Model(Base):
             else:
                 query = select(cls).where(*args).options(*loaders)
 
-            query = cls._order_by(query,order_by)
+            query = cls._order_by(query, order_by)
             result = await session.execute(query)
             if columns:
                 data = result.one_or_none()
@@ -165,7 +181,7 @@ class Model(Base):
             query = (
                 select(cls).where(*args).offset(offset).limit(limit).options(*loaders)
             )
-            query = cls._order_by(query,order_by)
+            query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalars().all()
             return data
@@ -188,7 +204,6 @@ class Model(Base):
             except Exception as e:
                 await session.rollback()
                 raise e
-            
 
     @classmethod
     async def select_with_joins(
