@@ -26,6 +26,18 @@ class Test(Model):
     name = Column(String())
     surname = Column(String())
 
+    same_id = Column(Integer, nullable=False)
+
+
+class Test2(Model):
+    __tablename__ = "test2"
+
+    id = Column(Integer, primary_key=True, nullable=False)
+    city = Column(String())
+    village = Column(String())
+
+    same_id = Column(Integer, nullable=False)
+
 
 async def create_tables():
     async with engine.begin() as conn:
@@ -40,37 +52,59 @@ async def main():
 
     # Example of creating an entry
     await Test.create(
-        {"id": 11, "country": "AZ", "name": "Amrah", "surname": "Baghirov"}
+        {"id": 11, "country": "AZ", "name": "Amrah", "surname": "Baghirov", "same_id": 20}
     )
     await Test.create(
-        {"id": 12, "country": "EN", "name": "Shukran", "surname": "Jabbarov"}
+        {"id": 12, "country": "EN", "name": "Shukran", "surname": "Jabbarov", "same_id": 21}
     )
     await Test.create(
-        {"id": 13, "country": "RU", "name": "Amrah", "surname": "Suleymanli"}
+        {"id": 13, "country": "RU", "name": "Amrah", "surname": "Suleymanli", "same_id": 21}
     )
+
+    await Test2.create(
+        {"id": 13, "city": "Baku", "village": "Bine",  "same_id": 20}
+    )
+    await Test2.create(
+        {"id": 14, "city": "Lankaran", "village": "Mardakan", "same_id": 20}
+    )
+
 
     # Example of selecting all entries
-    all_entries = await Test.select_all()
+    all_entries = await Test.select_all(columns=["country", "name"])
     print("all entries:", all_entries)
 
-    specific_entries = await Test.select_all(Test.name == "Kerim")
+    specific_entries = await Test.select_all(Test.name == "Shukran", columns=["country"])
     print("specific entries:", specific_entries)
 
-    # Example of selecting one entry
-    entry = await Test.select_one(Test.country == "AZ")
-    print("entry", entry)
+    entry = await Test.select_one(Test.country == "AZ", columns=["country", "name"])
+    print("entry", entry.country, entry.name)
+
+
+    # Example of selecting data with joins
+    join_tables = [Test2]
+    join_conditions = [Test.same_id == Test2.same_id]
+    
+    # Define columns to select
+    columns = [Test.id, Test.country, Test.name, Test2.village, Test2.same_id]
+
+    # Call the select_with_joins method
+    result = await Test.select_with_joins(Test2.city!="Baku", join_tables=join_tables, join_conditions=join_conditions, columns=columns)
+
+    # Print the result
+    for row in result:
+        print(row)
 
     entry = await Test.select_one(and_(Test.country == "AZ", Test.name == "Amrah"))
     print("entry", entry)
 
-    # Example of updating an entry
+    #Example of updating an entry
     updated_entry = await Test.update({"name": "Ulvi"}, Test.country == "AZ")
     print("updated entry", updated_entry)
 
-    # Example of deleting an entry
+    #Example of deleting an entry
     await Test.delete(Test.country == "AZ")
 
-    # Check if the entry has been deleted
+    #Check if the entry has been deleted
     all_entries_after_deletion = await Test.select_all()
     print("all entries after deletion:", all_entries_after_deletion)
 
@@ -84,9 +118,9 @@ async def main():
     )
     print("all entries with pagination", all_entries_pagination_and_criteria)
 
-    # Example of self-updating
-    entry = await Test.select_one(Test.country == "AZ")
-    entry.country = "EN"
+    #Example of self-updating
+    entry = await Test.select_one(Test.country == "EN")
+    entry.country = "RU"
     await entry.apply()
     print("updated entry", entry)
 

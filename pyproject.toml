@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqla-async-orm-queries"
-version = "1.1.2"
+version = "1.1.7"
 description = "Base model for SqlAlchemy async orm queries"
 authors = ["Amrah <bagirovemrah97@gmail.com>"]
 license = "MIT"
@@ -24,3 +24,4 @@ classifiers = [
 python = "^3.8.2"
 sqlalchemy = ">=2.0.21"
 asyncpg = ">=0.28.0"
+greenlet = "^3.0.3"

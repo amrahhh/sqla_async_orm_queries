@@ -1,9 +1,10 @@
-from typing import List, TypeVar, Callable
+from typing import List, TypeVar, Callable, Union
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, selectinload
 from sqlalchemy.sql.functions import count
 from sqlalchemy.sql.elements import BinaryExpression
+from sqlalchemy.orm.query import Query
 
 
 SessionLocal = None
@@ -61,6 +62,26 @@ class Model(Base):
         return loaders
 
     @classmethod
+    def _build_columns(cls, columns: list[str]):
+        return [getattr(cls, i) for i in columns]
+
+    @classmethod
+    async def execute_query(
+        cls, query: Union[Query, str], scalar: bool = False, all: bool = False
+    ):
+        async with SessionLocal() as session:
+            result = await session.execute(query)
+            if scalar and all:
+                data = result.scalars().all()
+            elif not scalar and all:
+                data = result.all()
+            elif scalar and not all:
+                data = result.scalar()
+            else:
+                raise NotImplementedError
+            return data
+
+    @classmethod
     async def create(cls, data: dict):
         async with SessionManager(SessionLocal) as session:
             try:
@@ -78,16 +99,22 @@ class Model(Base):
         *args: BinaryExpression,
         order_by: list[str] = None,
         load_with: list[str] = None,
-        loader_func: Callable = None
+        loader_func: Callable = None,
+        columns: list[str] = None
     ):
         loaders = []
         async with SessionManager(SessionLocal) as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
-            query = select(cls).where(*args).options(*loaders)
+            if columns:
+                selected_columns = [getattr(cls, col) for col in columns]
+                query = select(*selected_columns).where(*args).options(*loaders)
+            else:
+                query = select(cls).where(*args).options(*loaders)
             query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalar()
+
             return data
 
     @classmethod
@@ -96,16 +123,22 @@ class Model(Base):
         *args: BinaryExpression,
         order_by: list[str] = None,
         load_with: list[str] = None,
-        loader_func: Callable = None
+        loader_func: Callable = None,
+        columns: list[str] = None
     ):
         loaders = []
         async with SessionManager(SessionLocal) as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
-            query = select(cls).where(*args).options(*loaders)
+            if columns:
+                selected_columns = [getattr(cls, col) for col in columns]
+                query = select(*selected_columns).where(*args).options(*loaders)
+            else:
+                query = select(cls).where(*args).options(*loaders)
             query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalars().all()
+
         return data
 
     @classmethod
@@ -182,3 +215,32 @@ class Model(Base):
             except Exception as e:
                 await session.rollback()
                 raise e
+
+    @classmethod
+    async def select_with_joins(
+        cls,
+        *args: BinaryExpression,
+        join_tables: List[TModels],
+        join_conditions: List[BinaryExpression],
+        columns: List[str],
+        order_by: List[str] = None,
+        offset: int = 0,
+        limit: int = 10
+    ):
+        if offset < 0:
+            raise ValueError("Offset cannot be negative")
+
+        async with SessionLocal() as session:
+            query = select(*columns)
+            for join_table, condition in zip(join_tables, join_conditions):
+                query = query.join(join_table, condition)
+            query = query.where(*args)
+            if order_by:
+                query = query.order_by(*order_by)
+
+            query = query.offset(offset).limit(limit)
+
+            result = await session.execute(query)
+            data = result.all()
+
+        return data
