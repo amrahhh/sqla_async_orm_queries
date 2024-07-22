@@ -27,11 +27,28 @@ class Base(AsyncAttrs, DeclarativeBase):
     pass
 
 
+class SessionManager:
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+        self.session = None
+
+    async def __aenter__(self):
+        self.session = self.session_factory()
+        return self.session
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if exc_type:
+            await self.session.rollback()
+        else:
+            await self.session.commit()
+        await self.session.close()
+
+
 class Model(Base):
     __abstract__ = True
 
     @staticmethod
-    def _order_by(query,order_by):
+    def _order_by(query, order_by):
         if order_by is not None:
             return query.order_by(*order_by)
         return query
@@ -45,7 +62,7 @@ class Model(Base):
 
     @classmethod
     async def create(cls, data: dict):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             try:
                 data = cls(**data)
                 session.add(data)
@@ -64,11 +81,11 @@ class Model(Base):
         loader_func: Callable = None
     ):
         loaders = []
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
             query = select(cls).where(*args).options(*loaders)
-            query = cls._order_by(query,order_by)
+            query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalar()
             return data
@@ -82,18 +99,18 @@ class Model(Base):
         loader_func: Callable = None
     ):
         loaders = []
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
             query = select(cls).where(*args).options(*loaders)
-            query = cls._order_by(query,order_by)
+            query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalars().all()
         return data
 
     @classmethod
     async def update(cls, data: dict, *args: BinaryExpression):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             try:
                 query = update(cls).where(*args).values(**data).returning(cls.id)
                 db_data = await session.execute(query)
@@ -106,7 +123,7 @@ class Model(Base):
 
     @classmethod
     async def delete(cls, *args: BinaryExpression):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             try:
                 query = delete(cls).where(*args)
                 db_data = await session.execute(query)
@@ -118,7 +135,7 @@ class Model(Base):
 
     @classmethod
     async def get_count(cls, *args: BinaryExpression):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             result = await session.execute(select(count(cls.id)).where(*args))
             total_count = result.scalar()
             return total_count
@@ -136,19 +153,19 @@ class Model(Base):
         loaders = []
         if offset < 0:
             raise Exception("offset can not be a negative")
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             if load_with:
                 loaders = cls._build_loader(load_with, loader_func)
             query = (
                 select(cls).where(*args).offset(offset).limit(limit).options(*loaders)
             )
-            query = cls._order_by(query,order_by)
+            query = cls._order_by(query, order_by)
             result = await session.execute(query)
             data = result.scalars().all()
             return data
 
     async def apply(self):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             try:
                 session.add(self)
                 await session.commit()
@@ -158,7 +175,7 @@ class Model(Base):
 
     @classmethod
     async def apply_all(self, models: List[TModels]):
-        async with SessionLocal() as session:
+        async with SessionManager(SessionLocal) as session:
             try:
                 session.add_all(models)
                 await session.commit()
