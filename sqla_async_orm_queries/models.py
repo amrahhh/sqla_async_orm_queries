@@ -5,7 +5,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker, selectinload
 from sqlalchemy.sql.functions import count
 from sqlalchemy.sql.elements import BinaryExpression
 from sqlalchemy.orm.query import Query
-
+from sqla_async_orm_queries.context import get_session, set_session, session_context
 
 SessionLocal = None
 INITIALIZED = False
@@ -31,19 +31,21 @@ class Base(AsyncAttrs, DeclarativeBase):
 class SessionManager:
     def __init__(self, session_factory=None) -> None:
         self.session_factory = session_factory or SessionLocal
-        self.session = None
 
     async def __aenter__(self):
-        self.session = self.session_factory()
-        await self.session.begin()
-        return self.session
+        session = self.session_factory()
+        await session.begin()
+        set_session(session)
+        return session
 
     async def __aexit__(self, exc_type, exc, tb):
+        session = get_session()
         if exc_type:
-            await self.session.rollback()
+            await session.rollback()
         else:
-            await self.session.commit()
-        await self.session.close()
+            await session.commit()
+        await session.close()
+        set_session(None)
 
 
 class Model(Base):
@@ -74,6 +76,7 @@ class Model(Base):
         all: bool = False,
         session: AsyncSession = None,
     ):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 result = await session.execute(query)
@@ -100,6 +103,7 @@ class Model(Base):
 
     @classmethod
     async def create(cls, data: dict, session: AsyncSession = None):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
@@ -130,6 +134,7 @@ class Model(Base):
         session: AsyncSession = None
     ):
         loaders = []
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 if load_with:
@@ -171,6 +176,7 @@ class Model(Base):
         session: AsyncSession = None
     ):
         loaders = []
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 if load_with:
@@ -207,6 +213,7 @@ class Model(Base):
     async def update(
         cls, data: dict, *args: BinaryExpression, session: AsyncSession = None
     ):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
@@ -230,6 +237,7 @@ class Model(Base):
 
     @classmethod
     async def delete(cls, *args: BinaryExpression, session: AsyncSession = None):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
@@ -251,6 +259,7 @@ class Model(Base):
 
     @classmethod
     async def get_count(cls, *args: BinaryExpression, session: AsyncSession = None):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 result = await session.execute(select(count(cls.id)).where(*args))
@@ -275,6 +284,7 @@ class Model(Base):
         loaders = []
         if offset < 0:
             raise Exception("offset can not be a negative")
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 if load_with:
@@ -302,6 +312,7 @@ class Model(Base):
             return data
 
     async def apply(self, session: AsyncSession = None):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
@@ -319,6 +330,7 @@ class Model(Base):
 
     @classmethod
     async def apply_all(self, models: List[TModels], session: AsyncSession = None):
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
@@ -349,6 +361,7 @@ class Model(Base):
     ):
         if offset < 0:
             raise ValueError("Offset cannot be negative")
+        session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 query = select(*columns)
