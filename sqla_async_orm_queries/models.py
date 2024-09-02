@@ -102,23 +102,28 @@ class Model(Base):
             return data
 
     @classmethod
-    async def create(cls, data: dict, session: AsyncSession = None):
+    async def create(
+        cls, data: dict, session: AsyncSession = None, commit: bool = True
+    ):
         session = session_context.get(session)
         if session is None:
             async with SessionLocal() as session:
                 try:
-                    data = cls(**data)
-                    session.add(data)
-                    await session.commit()
-                    return data
+                    instance = cls(**data)
+                    session.add(instance)
+                    if commit:
+                        await session.commit()
+                    return instance
                 except Exception as e:
                     await session.rollback()
                     raise e
         else:
             try:
-                data = cls(**data)
-                session.add(data)
-                return data
+                instance = cls(**data)
+                session.add(instance)
+                if commit:
+                    await session.commit()
+                return instance
             except Exception as e:
                 await session.rollback()
                 raise e
