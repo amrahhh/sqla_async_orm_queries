@@ -1,8 +1,26 @@
 from __future__ import annotations  # For forward references
 from typing import List, TypeVar, Callable, Optional, Any, Dict, Type
-from sqlalchemy import delete, select, update, func, Column, Boolean, Integer, String, DateTime, JSON, event
+from sqlalchemy import (
+    delete,
+    select,
+    update,
+    func,
+    Column,
+    Boolean,
+    Integer,
+    String,
+    DateTime,
+    JSON,
+    event,
+)
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, selectinload, joinedload, object_session,Session
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    selectinload,
+    joinedload,
+    object_session,
+    Session,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
@@ -26,7 +44,7 @@ class SoftDeleteMixin:
 
     @classmethod
     async def soft_delete(cls, *args, session: Optional[AsyncSession] = None):
-        await cls.update({'is_deleted': False}, *args, session=session)
+        await cls.update({"is_deleted": False}, *args, session=session)
 
 
 def make_serializable(data):
@@ -35,10 +53,11 @@ def make_serializable(data):
     elif isinstance(data, list):
         return [make_serializable(item) for item in data]
     elif isinstance(data, datetime):
-        return data.isoformat() 
+        return data.isoformat()
     elif hasattr(data, "to_dict"):
         return data.to_dict()
-    return data 
+    return data
+
 
 class Model(Base, SoftDeleteMixin):
     __abstract__ = True
@@ -51,20 +70,24 @@ class Model(Base, SoftDeleteMixin):
     @classmethod
     def init_session(cls, session_factory: async_sessionmaker[AsyncSession]):
         if not isinstance(session_factory, async_sessionmaker):
-            raise TypeError("The session_factory must be an instance of async_sessionmaker.")
+            raise TypeError(
+                "The session_factory must be an instance of async_sessionmaker."
+            )
         cls.session_factory = session_factory
 
     @classmethod
     def _ensure_session_factory(cls):
         if cls.session_factory is None:
-            raise RuntimeError("Session factory is not initialized. Call init_session first.")
+            raise RuntimeError(
+                "Session factory is not initialized. Call init_session first."
+            )
 
     @staticmethod
     def _order_by(query, order_by, cls):
         if order_by:
             columns = []
             for col in order_by:
-                if col.startswith('-'):
+                if col.startswith("-"):
                     columns.append(getattr(cls, col[1:]).desc())
                 else:
                     columns.append(getattr(cls, col))
@@ -72,7 +95,9 @@ class Model(Base, SoftDeleteMixin):
         return query
 
     @classmethod
-    def _build_loader(cls, loader_fields: List[str], loader_func: Callable = selectinload):
+    def _build_loader(
+        cls, loader_fields: List[str], loader_func: Callable = selectinload
+    ):
         loaders = []
         for field in loader_fields:
             if hasattr(cls, field):
@@ -107,7 +132,9 @@ class Model(Base, SoftDeleteMixin):
         return cls(**pydantic_model.dict())
 
     def to_dict(self, include_relationships=False):
-        data = {column.name: getattr(self, column.name) for column in self.__table__.columns}
+        data = {
+            column.name: getattr(self, column.name) for column in self.__table__.columns
+        }
         if include_relationships:
             for relation in self.__mapper__.relationships:
                 related = getattr(self, relation.key)
@@ -119,7 +146,10 @@ class Model(Base, SoftDeleteMixin):
         return data
 
     def to_json(self, include_relationships=False):
-        return json.dumps(self.to_dict(include_relationships=include_relationships),default=make_serializable)
+        return json.dumps(
+            self.to_dict(include_relationships=include_relationships),
+            default=make_serializable,
+        )
 
     @classmethod
     async def create(cls, data: dict, session: Optional[AsyncSession] = None) -> Model:
@@ -129,11 +159,13 @@ class Model(Base, SoftDeleteMixin):
             return instance
 
     @classmethod
-    async def bulk_create(cls, data_list: List[dict], session: Optional[AsyncSession] = None) -> List[Model]:
+    async def bulk_create(
+        cls, data_list: List[dict], session: Optional[AsyncSession] = None
+    ) -> List[Model]:
         instances = []
         async with cls.get_session(session) as session:
             for data in data_list:
-    
+
                 instance = cls(**data)
                 instances.append(instance)
             session.add_all(instances)
@@ -150,7 +182,7 @@ class Model(Base, SoftDeleteMixin):
         session: Optional[AsyncSession] = None,
         include_inactive=False,
     ) -> Optional[Model]:
-        if not include_inactive and hasattr(cls, 'is_deleted'):
+        if not include_inactive and hasattr(cls, "is_deleted"):
             args = (*args, cls.is_deleted == True)
         async with cls.get_session(session) as session:
             loaders = cls._build_loader(load_with, loader_func) if load_with else []
@@ -175,9 +207,9 @@ class Model(Base, SoftDeleteMixin):
         session: Optional[AsyncSession] = None,
         include_inactive=False,
         limit: int = None,
-        offset: int = None
+        offset: int = None,
     ) -> List[Model]:
-        if not include_inactive and hasattr(cls, 'is_deleted'):
+        if not include_inactive and hasattr(cls, "is_deleted"):
             args = (*args, cls.is_deleted == True)
         async with cls.get_session(session) as session:
             loaders = cls._build_loader(load_with, loader_func) if load_with else []
@@ -230,7 +262,9 @@ class Model(Base, SoftDeleteMixin):
             return result.rowcount
 
     @classmethod
-    async def bulk_delete(cls, conditions_list: List[Any], session: Optional[AsyncSession] = None) -> int:
+    async def bulk_delete(
+        cls, conditions_list: List[Any], session: Optional[AsyncSession] = None
+    ) -> int:
         async with cls.get_session(session) as session:
             total_deleted = 0
             for conditions in conditions_list:
@@ -269,12 +303,14 @@ class Model(Base, SoftDeleteMixin):
             session=session,
             offset=offset,
             limit=per_page,
-            include_inactive=include_inactive
+            include_inactive=include_inactive,
         )
         return PaginationResult(items, total, page, per_page)
 
     @classmethod
-    async def transactional(cls, operations: Callable, session: Optional[AsyncSession] = None):
+    async def transactional(
+        cls, operations: Callable, session: Optional[AsyncSession] = None
+    ):
         async with cls.get_session(session) as session:
             try:
                 await operations(session)
@@ -307,40 +343,39 @@ class Model(Base, SoftDeleteMixin):
             table_name=target.__tablename__,
             operation=operation,
             timestamp=datetime.utcnow(),
-            data=data
+            data=data,
         )
-        # audit.data = make_serializable(target)
         sync_session.add(audit)
         sync_session.flush()
 
     @classmethod
     def after_insert(cls, mapper, connection, target):
-        if hasattr(target, 'created_at'):
+        if hasattr(target, "created_at"):
             target.created_at = datetime.utcnow()
-        cls.log_operation(mapper, connection, target, 'insert')
+        cls.log_operation(mapper, connection, target, "insert")
 
     @classmethod
     def after_update(cls, mapper, connection, target):
-        if hasattr(target, 'updated_at'):
+        if hasattr(target, "updated_at"):
             target.updated_at = datetime.utcnow()
-        cls.log_operation(mapper, connection, target, 'update')
+        cls.log_operation(mapper, connection, target, "update")
 
     @classmethod
     def after_delete(cls, mapper, connection, target):
-        cls.log_operation(mapper, connection, target, 'delete')
+        cls.log_operation(mapper, connection, target, "delete")
 
     # Attach Event Listeners
     @classmethod
     def attach_listeners(cls):
-        event.listen(cls, 'after_insert', cls.after_insert)
-        event.listen(cls, 'after_update', cls.after_update)
-        event.listen(cls, 'after_delete', cls.after_delete)
+        event.listen(cls, "after_insert", cls.after_insert)
+        event.listen(cls, "after_update", cls.after_update)
+        event.listen(cls, "after_delete", cls.after_delete)
 
     @classmethod
     def detach_listeners(cls):
-        event.remove(cls, 'after_insert', cls.after_insert)
-        event.remove(cls, 'after_update', cls.after_update)
-        event.remove(cls, 'after_delete', cls.after_delete)
+        event.remove(cls, "after_insert", cls.after_insert)
+        event.remove(cls, "after_update", cls.after_update)
+        event.remove(cls, "after_delete", cls.after_delete)
 
     @classmethod
     @contextmanager
@@ -356,11 +391,33 @@ class Model(Base, SoftDeleteMixin):
             session.add(self)
 
     @classmethod
-    async def save_all(cls, models: List[TModels], session: Optional[AsyncSession] = None):
+    async def save_all(
+        cls, models: List[TModels], session: Optional[AsyncSession] = None
+    ):
         async with cls.get_session(session) as session:
             for model in models:
                 model.validate_data(model.to_dict())
             session.add_all(models)
+
+    @classmethod
+    async def execute_query(
+        cls,
+        query,
+        scalar: bool = False,
+        all: bool = False,
+        session: AsyncSession = None,
+    ):
+        async with cls.get_session(session) as session:
+            result = await session.execute(query)
+            if scalar and all:
+                data = result.scalars().all()
+            elif not scalar and all:
+                data = result.all()
+            elif scalar and not all:
+                data = result.scalar()
+            else:
+                raise NotImplementedError
+            return data
 
 
 class PaginationResult:
@@ -384,17 +441,18 @@ class PaginationResult:
 
     def to_dict(self):
         return {
-            'items': [item.to_dict() for item in self.items],
-            'total': self.total,
-            'page': self.page,
-            'per_page': self.per_page,
-            'pages': self.pages,
-            'has_next': self.has_next,
-            'has_prev': self.has_prev,
+            "items": [item.to_dict() for item in self.items],
+            "total": self.total,
+            "page": self.page,
+            "per_page": self.per_page,
+            "pages": self.pages,
+            "has_next": self.has_next,
+            "has_prev": self.has_prev,
         }
 
+
 class AuditLog(Model):
-    __tablename__ = 'audit_logs'
+    __tablename__ = "audit_logs"
     id = Column(Integer, primary_key=True)
     table_name = Column(String)
     operation = Column(String)
