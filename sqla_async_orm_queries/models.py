@@ -118,6 +118,7 @@ class Model(Base):
             try:
                 data = cls(**data)
                 session.add(data)
+                await session.commit()
                 return data
             except Exception as e:
                 await session.rollback()
@@ -190,7 +191,7 @@ class Model(Base):
 
                 query = cls._order_by(query, order_by)
                 result = await session.execute(query)
-                data = result.scalars().all()
+                data = result.mappings().all()
 
                 return data
         else:
@@ -205,7 +206,7 @@ class Model(Base):
 
             query = cls._order_by(query, order_by)
             result = await session.execute(query)
-            data = result.scalars().all()
+            data = result.mappings().all()
 
             return data
 
