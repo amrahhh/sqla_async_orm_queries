@@ -1,5 +1,18 @@
-# SQLAlchemy Async ORM Queries
-This is a simple implementation of an asynchronous ORM (Object-Relational Mapping) with SQLAlchemy, designed to work with asynchronous operations in Python. The code provided here demonstrates basic CRUD (Create, Read, Update, Delete) operations using SQLAlchemy's async features.
+# SQLAlchemy ORM with Async Support
+
+This project provides an abstract base class `Model` with advanced CRUD operations, audit logging, and support for SQLAlchemy's async ORM functionality. It includes several useful features such as soft delete functionality, Pydantic model integration for validation, and audit logging with event listeners.
+
+## Key Features
+
+- **Async Session Management**: Provides session management using async SQLAlchemy.
+- **CRUD Operations**: Includes create, read, update, and delete operations.
+- **Soft Delete**: Ability to soft-delete records by marking them as inactive.
+- **Audit Logging**: Automatically logs changes to models (insert, update, delete).
+- **Pydantic Model Integration**: Supports data validation using Pydantic models.
+- **Event Listeners**: Event listeners automatically trigger audit logging on inserts, updates, and deletes.
+- **Transaction Management**: Supports transactional operations with rollback on failure.
+- **Pagination Support**: Allows for paginated queries and returns results with metadata.
+- **Bulk Operations**: Provides bulk create, update, and delete functionality.
 
 ### Installation
 ```sh
@@ -15,94 +28,134 @@ poetry add sqla-async-orm-queries
 Usage Examples
 Before using this code, ensure you have the following dependency installed:
 
-Python 3.7 or above
+Python 3.8 or above
 
-### Usage
 
-Create your async engine 
+## How to Use
+
+### 1. Define a Model
+
+To define your own model, inherit from the `Model` class and define your fields using SQLAlchemy's `Column` types. Each model can also define its own Pydantic schema for validation purposes.
+
 ```python
-import asyncio
-from sqlalchemy import Column, String, Integer, and_
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqla_async_orm_queries import Model, init_session
+from sqlalchemy import Column, Integer, String
+from sqla_async_orm_queries.models import  Model, PydanticModelMixin, AuditLog
 
+class User(Model):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=True,
-)
-```
-Create your session. Use async_sessionmaker
-```python
-SessionLocal = async_sessionmaker(
-    expire_on_commit=True,
-    class_=AsyncSession,
-    bind=engine,
-)
-```
-
-Declare your model
-```python
-class Test(Model):
-    __tablename__ = "test"
-
-    id = Column(Integer, primary_key=True, nullable=False)
-    country = Column(String())
-    name = Column(String())
-    surname = Column(String())
+    class PydanticModel(PydanticModelMixin):
+        id: Optional[int]
+        name: str
+        email: str
 ```
 
-Initialized your session
+### 2. Initialize the Session
+
+You need to initialize the session factory to enable database operations. Make sure to provide an `async_sessionmaker` for managing async sessions.
+
 ```python
-init_session(SessionLocal)
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqla_async_orm_queries.models import  Model, PydanticModelMixin, AuditLog
+
+DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+engine = create_async_engine(DATABASE_URL)
+SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+Model.init_session(SessionLocal)
 ```
 
-Example of creating an entry
+### 3. Perform CRUD Operations
+
+CRUD operations are supported out of the box. You can create, read, update, delete, and soft delete records using the provided methods.
+
 ```python
-await Test.create({"id": 1, "country": "AZ", "name": "Amrah", "surname": "Baghirov"})
+# Create a new user
+user_data = {'name': 'John Doe', 'email': 'john@example.com'}
+user = await User.create(user_data)
+
+# Read a user
+user = await User.select_one(User.id == 1)
+
+# Update a user
+await User.update({'name': 'Jane Doe'}, User.id == 1)
+
+# Soft delete a user
+await User.soft_delete(User.id == 1)
 ```
 
-Example of selecting all entries
-```python
-all_entries = await Test.select_all()
+### 4. Audit Logging
 
-specific_entries = await Test.select_all(Test.name=="Amrah")
+The `AuditLog` model automatically logs any insert, update, or delete operation. The logs are stored in the `audit_logs` table.
+
+```python
+# View audit logs
+audit_logs = await AuditLog.select_all()
 ```
 
-Example of selecting one entry
-```python
-entry = await Test.select_one(Test.country == "AZ")
+### 5. Transaction Management
 
-# You can use and_ & or_ operation
-entry = await Test.select_one(and_(Test.country == "AZ", Test.name == "Amrah"))
+The `transactional` method provides an easy way to run a set of operations inside a transaction. If any error occurs, the transaction will be rolled back.
+
+```python
+async def my_operations(session):
+    await User.create({'name': 'New User', 'email': 'new_user@example.com'}, session=session)
+
+await User.transactional(my_operations)
 ```
 
-Example of updating an entry
+### 6. Bulk Operations
+
+You can create, update, and delete multiple records in a single transaction using the `bulk_create`, `bulk_update`, and `bulk_delete` methods.
+
 ```python
-updated_entry = await Test.update({"name": "Ulvi"}, Test.country == "AZ")
+# Bulk create users
+users_data = [{'name': 'User 1', 'email': 'user1@example.com'}, {'name': 'User 2', 'email': 'user2@example.com'}]
+await User.bulk_create(users_data)
+
+# Bulk delete users
+await User.bulk_delete([User.id == 1, User.id == 2])
 ```
 
-Example of deleting an entry
+### 7. Pagination
+
+Paginate through results using the `select_with_pagination` method:
+
 ```python
-await Test.delete(Test.country == "AZ")
+pagination = await User.select_with_pagination(page=2, per_page=10)
+print(pagination.items)  # The users on the second page
 ```
 
-Example of selecting all entries with pagination
-```python
-all_entries_pagination = await Test.select_with_pagination(page=1, size=1)
+## Installation
+
+1. Install the necessary dependencies:
+
+```bash
+pip install sqlalchemy aiosqlite pydantic
 ```
 
-Example of selecting all entries with pagination and args
-```python
-all_entries_pagination_and_criteria = await Test.select_with_pagination(
-    Test.name == "Amrah", page=1, size=1
-)
+2. Copy or clone this repository and define your models by inheriting from `Model`.
+
+## Running Tests
+
+You can run tests using `pytest` and `pytest-asyncio` for testing asynchronous operations. 
+
+1. Install the test dependencies:
+
+```bash
+pip install pytest pytest-asyncio
 ```
 
-Example of self-updating 
-```python
-entry = await Test.select_one(Test.country == "AZ")
-entry.country = "EN"
-await entry.apply()
+2. Run the tests:
+
+```bash
+pytest
 ```
-You can check full example in `examples` folder
+
+## License
+
+This project is licensed under the MIT License.
