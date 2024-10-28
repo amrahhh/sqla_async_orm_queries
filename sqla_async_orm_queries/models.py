@@ -1,30 +1,28 @@
 from __future__ import annotations  # For forward references
-from typing import List, TypeVar, Callable, Optional, Any, Dict, Type
+from typing import List, TypeVar, Callable, Optional, Any, Dict
 from sqlalchemy import (
     delete,
     select,
     update,
     func,
     Column,
-    Boolean,
     Integer,
     String,
     DateTime,
     JSON,
     event,
+    Boolean
 )
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import (
     DeclarativeBase,
     selectinload,
-    joinedload,
-    object_session,
     Session,
 )
-from sqlalchemy.exc import SQLAlchemyError
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel as PydanticBaseModel, ValidationError
+from functools import wraps
 import json
 
 TModels = TypeVar("TModels", bound="Model")
@@ -36,7 +34,7 @@ class Base(DeclarativeBase, AsyncAttrs):
 
 class PydanticModelMixin(PydanticBaseModel):
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class SoftDeleteMixin:
@@ -45,7 +43,6 @@ class SoftDeleteMixin:
     @classmethod
     async def soft_delete(cls, *args, session: Optional[AsyncSession] = None):
         await cls.update({"is_deleted": False}, *args, session=session)
-
 
 def make_serializable(data):
     if isinstance(data, dict):
@@ -58,6 +55,22 @@ def make_serializable(data):
         return data.to_dict()
     return data
 
+def transactional(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        if 'session' in kwargs and kwargs['session'] is not None:
+            return await func(*args, **kwargs)
+        else:
+            async with cls.get_session() as session:
+                try:
+                    kwargs['session'] = session
+                    result = await func(*args, **kwargs)
+                    await session.commit()
+                    return result
+                except Exception as e:
+                    await session.rollback()
+                    raise e
+    return wrapper
 
 class Model(Base, SoftDeleteMixin):
     __abstract__ = True
@@ -125,7 +138,7 @@ class Model(Base, SoftDeleteMixin):
             raise ValueError(f"Validation error: {e.errors()}")
 
     def to_pydantic(self):
-        return self.PydanticModel.from_orm(self)
+        return self.PydanticModel.model_validate(self)
 
     @classmethod
     def from_pydantic(cls, pydantic_model):
@@ -165,7 +178,6 @@ class Model(Base, SoftDeleteMixin):
         instances = []
         async with cls.get_session(session) as session:
             for data in data_list:
-
                 instance = cls(**data)
                 instances.append(instance)
             session.add_all(instances)
@@ -342,7 +354,7 @@ class Model(Base, SoftDeleteMixin):
         audit = AuditLog(
             table_name=target.__tablename__,
             operation=operation,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(tz=timezone.utc),
             data=data,
         )
         sync_session.add(audit)
@@ -351,13 +363,13 @@ class Model(Base, SoftDeleteMixin):
     @classmethod
     def after_insert(cls, mapper, connection, target):
         if hasattr(target, "created_at"):
-            target.created_at = datetime.utcnow()
+            target.created_at = datetime.now(tz=timezone.utc)
         cls.log_operation(mapper, connection, target, "insert")
 
     @classmethod
     def after_update(cls, mapper, connection, target):
         if hasattr(target, "updated_at"):
-            target.updated_at = datetime.utcnow()
+            target.updated_at = datetime.now(tz=timezone.utc)
         cls.log_operation(mapper, connection, target, "update")
 
     @classmethod
@@ -389,6 +401,11 @@ class Model(Base, SoftDeleteMixin):
     async def save(self, session: Optional[AsyncSession] = None):
         async with self.get_session(session) as session:
             session.add(self)
+
+    async def apply(self, session: Optional[AsyncSession] = None):
+        async with self.get_session(session) as session:
+            session.add(self)
+            # await session.commit()
 
     @classmethod
     async def save_all(
@@ -456,5 +473,5 @@ class AuditLog(Model):
     id = Column(Integer, primary_key=True)
     table_name = Column(String)
     operation = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now(tz=timezone.utc))
     data = Column(JSON)

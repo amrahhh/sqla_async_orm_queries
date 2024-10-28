@@ -2,7 +2,7 @@ import pytest
 import sqlalchemy
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # Import your Model classes here
@@ -26,14 +26,14 @@ class User(Model):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(tz=timezone.utc))
 
     class PydanticModel(PydanticModelMixin):
         id: Optional[int] = None
         name: Optional[str] = None
         email: Optional[str] = None
         is_active: Optional[bool] = True
-        created_at: Optional[datetime] = datetime.utcnow()
+        created_at: Optional[datetime] = datetime.now(tz=timezone.utc)
 
 # Attach event listeners for audit logging
 User.attach_listeners()
