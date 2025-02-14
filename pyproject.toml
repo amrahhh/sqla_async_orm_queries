@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "sqla-async-orm-queries"
-version = "2.0.0-beta"
+version = "2.1.0"
 description = "Base model for SqlAlchemy async orm queries"
 authors = ["Amrah <bagirovemrah97@gmail.com>"]
 license = "MIT"
@@ -21,7 +21,26 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8.2"
+python = "^3.9"
 sqlalchemy = ">=2.0.21"
 asyncpg = ">=0.28.0"
 greenlet = "^3.0.3"
+
+[tool.poetry.group.dev.dependencies]
+fastapi = "^0.115.8"
+aiosqlite = "^0.21.0"
+pytest = "^8.3.4"
+ruff = "^0.9.4"
+pytest-asyncio = "^0.25.3"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["asyncio: mark a test as an asyncio coroutine"]
+
+[tool.ruff]
+line-length = 79
+exclude = [".venv"]
+
+[tool.ruff.format]
+indent-style = "tab"
+docstring-code-format = true
