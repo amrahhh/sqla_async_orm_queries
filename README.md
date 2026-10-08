@@ -6,8 +6,8 @@ This project provides an abstract base class `Model` with advanced CRUD operatio
 
 - **Async Session Management**: Provides session management using async SQLAlchemy.
 - **CRUD Operations**: Includes create, read, update, and delete operations.
-- **Soft Delete**: Ability to soft-delete records by marking them as inactive.
-- **Audit Logging**: Automatically logs changes to models (insert, update, delete).
+- **Soft Delete** (opt-in): Ability to soft-delete records by marking them as inactive.
+- **Audit Logging** (opt-in): Logs changes to models (insert, update, delete).
 - **Pydantic Model Integration**: Supports data validation using Pydantic models.
 - **Event Listeners**: Event listeners automatically trigger audit logging on inserts, updates, and deletes.
 - **Transaction Management**: Supports transactional operations with rollback on failure.
@@ -28,7 +28,7 @@ poetry add sqla-async-orm-queries
 Usage Examples
 Before using this code, ensure you have the following dependency installed:
 
-Python 3.8 or above
+Python 3.11 or above
 
 
 ## How to Use
@@ -38,8 +38,10 @@ Python 3.8 or above
 To define your own model, inherit from the `Model` class and define your fields using SQLAlchemy's `Column` types. Each model can also define its own Pydantic schema for validation purposes.
 
 ```python
+from typing import Optional
+
 from sqlalchemy import Column, Integer, String
-from sqla_async_orm_queries.models import  Model, PydanticModelMixin, AuditLog
+from sqla_async_orm_queries.models import Model, PydanticModelMixin
 
 class User(Model):
     __tablename__ = 'users'
@@ -59,7 +61,7 @@ You need to initialize the session factory to enable database operations. Make s
 
 ```python
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqla_async_orm_queries.models import  Model, PydanticModelMixin, AuditLog
+from sqla_async_orm_queries.models import Model, PydanticModelMixin
 
 DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -84,16 +86,19 @@ user = await User.select_one(User.id == 1)
 # Update a user
 await User.update({'name': 'Jane Doe'}, User.id == 1)
 
-# Soft delete a user
+# Soft delete a user (the model needs SoftDeleteMixin: class User(SoftDeleteMixin, Model))
 await User.soft_delete(User.id == 1)
 ```
 
 ### 4. Audit Logging
 
-The `AuditLog` model automatically logs any insert, update, or delete operation. The logs are stored in the `audit_logs` table.
+Audit logging is opt-in. Import `AuditLog` (this adds the `audit_logs` table) and attach listeners to the models you want logged:
 
 ```python
-# View audit logs
+from sqla_async_orm_queries.audit import AuditLog
+
+User.attach_listeners()
+
 audit_logs = await AuditLog.select_all()
 ```
 
@@ -106,6 +111,15 @@ async def my_operations(session):
     await User.create({'name': 'New User', 'email': 'new_user@example.com'}, session=session)
 
 await User.transactional(my_operations)
+```
+
+If you pass your own `session`, methods don't commit — you do, once, at the end:
+
+```python
+async with SessionLocal() as session:
+    await User.create({'name': 'New User', 'email': 'new_user@example.com'}, session=session)
+    await User.execute_query_write(update(User).where(User.id == 1).values(name='Jane'), session=session)
+    await session.commit()
 ```
 
 ### 6. Bulk Operations
@@ -130,30 +144,22 @@ pagination = await User.select_with_pagination(page=2, per_page=10)
 print(pagination.items)  # The users on the second page
 ```
 
+## Upgrading to 3.0
+
+Soft delete and audit logging are now opt-in. If you use them, add `SoftDeleteMixin` to those models and import `sqla_async_orm_queries.audit`. Requires Python 3.11+. Install your database driver (e.g. `asyncpg`) yourself.
+
 ## Installation
 
-1. Install the necessary dependencies:
-
 ```bash
-pip install sqlalchemy aiosqlite pydantic
+pip install sqla-async-orm-queries
+pip install asyncpg  # or your database driver, e.g. aiosqlite
 ```
-
-2. Copy or clone this repository and define your models by inheriting from `Model`.
 
 ## Running Tests
 
-You can run tests using `pytest` and `pytest-asyncio` for testing asynchronous operations. 
-
-1. Install the test dependencies:
-
 ```bash
-pip install pytest pytest-asyncio
-```
-
-2. Run the tests:
-
-```bash
-pytest
+poetry install
+make test
 ```
 
 ## License

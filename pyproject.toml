@@ -1,37 +1,36 @@
-[tool.poetry]
+[project]
 name = "sqla-async-orm-queries"
-version = "2.1.1"
+version = "3.0.0"
 description = "Base model for SqlAlchemy async orm queries"
-authors = ["Amrah <bagirovemrah97@gmail.com>"]
+authors = [{ name = "Amrah", email = "bagirovemrah97@gmail.com" }]
 license = "MIT"
+license-files = ["LICENCE.md"]
 readme = "README.md"
-homepage = "https://github.com/amrahhh/sqla_async_orm_queries"
-repository = "https://github.com/amrahhh/sqla_async_orm_queries"
+requires-python = ">=3.11,<4.0"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0.21",
+    "greenlet>=3.0.3,<4.0",
+    "pydantic>=2.0,<3.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-sqlalchemy = ">=2.0.21"
-asyncpg = ">=0.28.0"
-greenlet = "^3.0.3"
+[project.urls]
+Homepage = "https://github.com/amrahhh/sqla_async_orm_queries"
+Repository = "https://github.com/amrahhh/sqla_async_orm_queries"
 
 [tool.poetry.group.dev.dependencies]
-fastapi = "^0.115.8"
-aiosqlite = "^0.21.0"
-pytest = "^8.3.4"
-ruff = "^0.9.4"
-pytest-asyncio = "^0.25.3"
+aiosqlite = "^0.22.1"
+pytest = "^9.1.1"
+ruff = "^0.16.10"
+pytest-asyncio = "^1.4.0"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -41,6 +40,13 @@ markers = ["asyncio: mark a test as an asyncio coroutine"]
 line-length = 79
 exclude = [".venv"]
 
+[tool.ruff.lint]
+ignore = ["PLR1704"]
+
 [tool.ruff.format]
 indent-style = "tab"
 docstring-code-format = true
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
