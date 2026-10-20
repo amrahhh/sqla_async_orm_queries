@@ -1,15 +1,24 @@
+import subprocess
+import sys
+import warnings
 from datetime import datetime, timezone
 from typing import Optional
 
 import pytest
 import sqlalchemy
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from pydantic import Field
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import relationship
 
 # Import your Model classes here
 # Assuming the codebase is in a file named 'models.py'
-from sqla_async_orm_queries.models import AuditLog, Model, PydanticModelMixin
+from sqla_async_orm_queries.models import (  # AuditLog: old import path still works
+	AuditLog,
+	Model,
+	PydanticModelMixin,
+	SoftDeleteMixin,
+)
 
 # Define a test database URL (in-memory SQLite)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -23,20 +32,24 @@ Model.init_session(AsyncSessionLocal)
 
 
 # Define test models
-class User(Model):
+class User(SoftDeleteMixin, Model):
 	__tablename__ = "users"
 	id = Column(Integer, primary_key=True, autoincrement=True)
 	name = Column(String, nullable=False)
 	email = Column(String, unique=True, nullable=False)
 	is_active = Column(Boolean, default=True)
-	created_at = Column(DateTime, default=datetime.now(tz=timezone.utc))
+	created_at = Column(
+		DateTime, default=lambda: datetime.now(tz=timezone.utc)
+	)
 
 	class PydanticModel(PydanticModelMixin):
 		id: Optional[int] = None
 		name: Optional[str] = None
 		email: Optional[str] = None
 		is_active: Optional[bool] = True
-		created_at: Optional[datetime] = datetime.now(tz=timezone.utc)
+		created_at: Optional[datetime] = Field(
+			default_factory=lambda: datetime.now(tz=timezone.utc)
+		)
 
 
 # Attach event listeners for audit logging
@@ -51,6 +64,7 @@ async def setup_database():
 	yield
 	async with engine.begin() as conn:
 		await conn.run_sync(Model.metadata.drop_all)
+	await engine.dispose()
 
 
 # Test cases
@@ -102,8 +116,9 @@ async def test_pagination():
 	assert pagination.page == 2
 	assert pagination.per_page == 5
 	assert len(pagination.items) == 5
-	assert pagination.total == 21
-	assert pagination.pages == 5
+	# 21 users exist, but john@example.com was soft-deleted earlier
+	assert pagination.total == 20
+	assert pagination.pages == 4
 	assert pagination.has_next == True
 	assert pagination.has_prev == True
 
@@ -267,3 +282,155 @@ async def test_event_listener_with_detach_context():
 	audit_logs = await AuditLog.select_all()
 	emails = [log.data.get("email") for log in audit_logs]
 	assert "noauditcontext@example.com" not in emails
+
+
+@pytest.mark.asyncio
+async def test_execute_query_write_commits_its_own_session():
+	await User.execute_query_write(
+		sqlalchemy.insert(User).values(name="Query Write", email="querywrite@example.com")
+	)
+
+	user = await User.select_one(User.email == "querywrite@example.com")
+	assert user is not None
+
+
+@pytest.mark.asyncio
+async def test_execute_query_write_joins_the_callers_transaction():
+	async with AsyncSessionLocal() as session:
+		await User.create(
+			{"name": "Rolled Back", "email": "rolledback@example.com"},
+			session=session,
+		)
+		await User.execute_query_write(
+			sqlalchemy.insert(User).values(name="Rolled Back 2", email="rolledback2@example.com"),
+			session=session,
+		)
+		await session.rollback()
+
+	emails = ["rolledback@example.com", "rolledback2@example.com"]
+	assert await User.select_one(User.email.in_(emails)) is None
+
+
+@pytest.mark.asyncio
+async def test_execute_query_write_is_saved_when_the_caller_commits():
+	async with AsyncSessionLocal() as session:
+		await User.execute_query_write(
+			sqlalchemy.insert(User).values(name="Committed", email="committed@example.com"),
+			session=session,
+		)
+		await session.commit()
+
+	assert await User.select_one(User.email == "committed@example.com") is not None
+
+
+# Nested relationships for load_with="books.pages"
+class Shelf(Model):
+	__tablename__ = "shelves"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	name = Column(String)
+	books = relationship("Book", back_populates="shelf")
+
+
+class Book(Model):
+	__tablename__ = "books"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	shelf_id = Column(Integer, ForeignKey("shelves.id"))
+	shelf = relationship("Shelf", back_populates="books")
+	pages = relationship("Page")
+
+
+class Page(Model):
+	__tablename__ = "pages"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	book_id = Column(Integer, ForeignKey("books.id"))
+
+
+@pytest.mark.asyncio
+async def test_create_has_id_inside_the_callers_transaction():
+	async with AsyncSessionLocal() as session:
+		user = await User.create(
+			{"name": "Flushed", "email": "flushed@example.com"}, session=session
+		)
+		assert user.id is not None
+		await session.rollback()
+
+	assert await User.select_one(User.email == "flushed@example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_update_returning_instances_and_columns():
+	await User.create({"name": "Before", "email": "returning@example.com"})
+
+	users = await User.update(
+		{"name": "After"}, User.email == "returning@example.com", returning=User
+	)
+	names = await User.update(
+		{"name": "After 2"},
+		User.email == "returning@example.com",
+		returning=[User.name],
+	)
+
+	assert [u.name for u in users] == ["After"]
+	assert names == ["After 2"]
+
+
+@pytest.mark.asyncio
+async def test_load_with_nested_relationships():
+	shelf = await Shelf.create({"name": "Fiction"})
+	book = await Book.create({"shelf_id": shelf.id})
+	await Page.bulk_create([{"book_id": book.id}, {"book_id": book.id}])
+
+	shelf = await Shelf.select_one(
+		Shelf.id == shelf.id, load_with=["books.pages"]
+	)
+
+	assert len(shelf.books[0].pages) == 2
+
+
+def test_soft_delete_is_opt_in():
+	assert "is_deleted" not in Shelf.__table__.c
+	assert not hasattr(Shelf, "soft_delete")
+	assert "is_deleted" in User.__table__.c
+
+
+def test_audit_log_is_opt_in():
+	check = (
+		"import sqla_async_orm_queries.models as m;"
+		"print('audit_logs' in m.Model.metadata.tables);"
+		"import sqla_async_orm_queries.audit;"
+		"print('audit_logs' in m.Model.metadata.tables)"
+	)
+	out = subprocess.run(
+		[sys.executable, "-c", check], capture_output=True, text=True, check=True
+	)
+	assert out.stdout.split() == ["False", "True"]
+
+
+@pytest.mark.asyncio
+async def test_soft_deleted_rows_are_hidden_by_default():
+	await User.bulk_create(
+		[
+			{"name": "Kept", "email": "kept@example.com"},
+			{"name": "Gone", "email": "gone@example.com"},
+		]
+	)
+	await User.soft_delete(User.email == "gone@example.com")
+	emails = User.email.in_(["kept@example.com", "gone@example.com"])
+
+	visible = await User.select_all(emails)
+	everything = await User.select_all(emails, include_inactive=True)
+
+	assert [u.email for u in visible] == ["kept@example.com"]
+	assert len(everything) == 2
+	assert await User.select_one(User.email == "gone@example.com") is None
+	assert await User.get_count(emails) == 1
+	assert await User.get_count(emails, include_inactive=True) == 2
+
+
+def test_from_pydantic_has_no_deprecation_warning():
+	with warnings.catch_warnings():
+		warnings.simplefilter("error")
+		user = User.from_pydantic(
+			User.PydanticModel(name="Py", email="py@example.com")
+		)
+	assert user.email == "py@example.com"

@@ -1,3 +1,3 @@
-from .models import Model, transactional
+from .models import Model, SoftDeleteMixin, transactional
 
-all = ["Model", "transactional"]
+__all__ = ["Model", "SoftDeleteMixin", "transactional"]
